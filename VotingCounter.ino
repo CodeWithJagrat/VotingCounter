@@ -1,33 +1,38 @@
-// Include required libraries
-#if defined(ESP32)
-#include <WiFi.h>
-#elif defined(ESP8266)
-#include <ESP8266WiFi.h>
-#endif
+#include <Arduino.h>
+// #include <WiFi.h>               //we are using the ESP32
+#include <ESP8266WiFi.h>      // uncomment this line if you are using esp8266 and comment the line above
 #include <Firebase_ESP_Client.h>
-#include <addons/TokenHelper.h>
 
-// Define WiFi credentials
+//Provide the token generation process info.
+#include "addons/TokenHelper.h"
+//Provide the RTDB payload printing info and other helper functions.
+#include "addons/RTDBHelper.h"
+
+// Insert your network credentials
 #define WIFI_SSID "ZTE-cz9JjE"
 #define WIFI_PASSWORD "pgh3pt6r"
 
-// Define Firebase API Key, Project ID, and user credentials
+// Insert Firebase project API Key
 #define API_KEY "AIzaSyBAppkpiENR7RyqfSVW5ZNLhHKwg8zGwfs"
-#define FIREBASE_PROJECT_ID "esp32-cam-python"
 
-// Define Firebase Data object, Firebase authentication, and configuration
+// Insert RTDB URLefine the RTDB URL */
+#define DATABASE_URL "https://esp32-cam-python-default-rtdb.firebaseio.com/" 
+
+//Define Firebase Data object
 FirebaseData fbdo;
+
 FirebaseAuth auth;
 FirebaseConfig config;
 
-void setup() {
-  // Initialize serial communication for debugging
-  Serial.begin(115200);
+unsigned long sendDataPrevMillis = 0;
+int count = 0;
+bool signupOK = false;                     //since we are doing an anonymous sign in 
 
-  // Connect to Wi-Fi
+void setup(){
+  Serial.begin(115200);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED){
     Serial.print(".");
     delay(300);
   }
@@ -36,55 +41,83 @@ void setup() {
   Serial.println(WiFi.localIP());
   Serial.println();
 
-  // Print Firebase client version
-  Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
-
-  // Assign the API key
+  /* Assign the api key (required) */
   config.api_key = API_KEY;
 
-  // Assign the callback function for the long-running token generation task
-  config.token_status_callback = tokenStatusCallback;  // see addons/TokenHelper.h
+  /* Assign the RTDB URL (required) */
+  config.database_url = DATABASE_URL;
 
-  // Begin Firebase with configuration and authentication
+  /* Sign up */
+  if (Firebase.signUp(&config, &auth, "", "")){
+    Serial.println("ok");
+    signupOK = true;
+  }
+  else{
+    Serial.printf("%s\n", config.signer.signupError.message.c_str());
+  }
+
+  /* Assign the callback function for the long running token generation task */
+  config.token_status_callback = tokenStatusCallback; //see addons/TokenHelper.h
+  
   Firebase.begin(&config, &auth);
-
-  // Reconnect to Wi-Fi if necessary
   Firebase.reconnectWiFi(true);
 }
 
-void loop() {
-  // Define the path to the Firestore document
-  String documentPath = "EspData/DHT11";
+void loop(){
 
-  // Create a FirebaseJson object for storing data
-  FirebaseJson content;
+  //temperature and humidity measured should be stored in variables so the user
+  //can use it later in the database
 
-  // Read temperature and humidity from the DHT sensor
-  float temperature = 1.3;
-  float humidity = 10.3;
+  int N1 = 0;
+  int N2 = 0;
+  int N3 = 0;
+  int N4 = 0;
+  
+  if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 1000 || sendDataPrevMillis == 0)){
+    //since we want the data to be updated every second
+    sendDataPrevMillis = millis();
+    // Enter Temperature in to the DHT_11 Table
+    if (Firebase.RTDB.setInt(&fbdo, "Vote/N1", N1)){
+      // This command will be executed even if you dont serial print but we will make sure its working
+      Serial.print("N1 : ");
+      Serial.println(N1);
+      Serial.print(" ");
+    }
+    else {
+      Serial.println("Failed to Read from the Sensor");
+      Serial.println("REASON: " + fbdo.errorReason());
+    }
 
-  // Print temperature and humidity values
-  Serial.println(temperature);
-  Serial.println(humidity);
+    
+    // Enter Humidity in to the DHT_11 Table
+    if (Firebase.RTDB.setInt(&fbdo, "Vote/N2", N2)){
+      Serial.print("N2 : ");
+      Serial.print(N2);
+      Serial.print(" ");
+    }
+    else {
+      Serial.println("Failed to Read from the Sensor");
+      Serial.println("REASON: " + fbdo.errorReason());
+    }
 
-  // Check if the values are valid (not NaN)
-  if (!isnan(temperature) && !isnan(humidity)) {
-    // Set the 'Temperature' and 'Humidity' fields in the FirebaseJson object
-    content.set("fields/Temperature/stringValue", String(temperature, 2));
-    content.set("fields/Humidity/stringValue", String(humidity, 2));
+    if (Firebase.RTDB.setInt(&fbdo, "Vote/N3", N3)){
+      Serial.print("N3 : ");
+      Serial.print(N3);
+      Serial.print(" ");
+    }
+    else {
+      Serial.println("Failed to Read from the Sensor");
+      Serial.println("REASON: " + fbdo.errorReason());
+    }
 
-    Serial.print("Update/Add DHT Data... ");
-
-    // Use the patchDocument method to update the Temperature and Humidity Firestore document
-    if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str(), content.raw(), "Temperature") && Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str(), content.raw(), "Humidity")) {
-      Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-      } else {
-            Serial.println(fbdo.errorReason());
-          }
-        } else {
-          Serial.println("Failed to read DHT data.");
-        }
-
-  // Delay before the next reading
-  delay(10000);
+    if (Firebase.RTDB.setInt(&fbdo, "Vote/N4", N4)){
+      Serial.print("N4 : ");
+      Serial.print(N4);
+      Serial.print(" ");
+    }
+    else {
+      Serial.println("Failed to Read from the Sensor");
+      Serial.println("REASON: " + fbdo.errorReason());
+    }
+  }
 }
